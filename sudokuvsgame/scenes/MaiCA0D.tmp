@@ -1,0 +1,74 @@
+[gd_scene load_steps=2 format=3 uid="uid://burudmh6qf18e"]
+
+[ext_resource type="Script" path="res://scripts/main_game.gd" id="1_7qmjx"]
+
+[node name="MainGame" type="Node2D"]
+position = Vector2(280, 563)
+script = ExtResource("1_7qmjx")
+
+[node name="GridContainer" type="GridContainer" parent="."]
+offset_left = 76.0
+offset_top = -535.0
+offset_right = 148.0
+offset_bottom = -423.0
+columns = 9
+
+[node name="SelectedGrid" type="GridContainer" parent="."]
+offset_right = 608.0
+offset_bottom = 64.0
+theme_override_constants/h_separation = 8
+columns = 9
+
+[node name="Button" type="Button" parent="SelectedGrid"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "1"
+
+[node name="Button2" type="Button" parent="SelectedGrid"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "2"
+
+[node name="Button3" type="Button" parent="SelectedGrid"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "3"
+
+[node name="Button4" type="Button" parent="SelectedGrid"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "4"
+
+[node name="Button5" type="Button" parent="SelectedGrid"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "5"
+
+[node name="Button6" type="Button" parent="SelectedGrid"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "6"
+
+[node name="Button7" type="Button" parent="SelectedGrid"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "7"
+
+[node name="Button8" type="Button" parent="SelectedGrid"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "8"
+
+[node name="Button9" type="Button" parent="SelectedGrid"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "9"
