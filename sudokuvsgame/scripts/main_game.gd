@@ -4,8 +4,10 @@ extends Node2D
 
 var gameGrid = []
 var puzzle = []
+var permanantNums = []
 var solution_grid = []
 var selectedButton:Vector2i = Vector2(-1, -1)
+
 const GRID_SIZE = 9
 var solution_count = 0
 var select_button_answer = 0
@@ -34,6 +36,19 @@ func _populate_grid():
 			row.append(create_button(Vector2(i,j)))
 		gameGrid.append(row)
 			
+			
+func _input(ev):
+	if ev is InputEventKey:
+		if Input.is_key_pressed(KEY_1): _on_numberKey_pressed(1)
+		if Input.is_key_pressed(KEY_2): _on_numberKey_pressed(2)
+		if Input.is_key_pressed(KEY_3): _on_numberKey_pressed(3)
+		if Input.is_key_pressed(KEY_4): _on_numberKey_pressed(4)
+		if Input.is_key_pressed(KEY_5): _on_numberKey_pressed(5)
+		if Input.is_key_pressed(KEY_6): _on_numberKey_pressed(6)
+		if Input.is_key_pressed(KEY_7): _on_numberKey_pressed(7)
+		if Input.is_key_pressed(KEY_8): _on_numberKey_pressed(8)
+		if Input.is_key_pressed(KEY_9): _on_numberKey_pressed(9)
+		if Input.is_key_pressed(KEY_BACKSPACE): _on_numberKey_pressed(0)
 
 func _create_empty_grid():
 	solution_grid = []
@@ -42,28 +57,43 @@ func _create_empty_grid():
 		for j in range(GRID_SIZE):
 			row.append(0)
 		solution_grid.append(row)
+		
 
 func _create_puzzle(difficulty):
 	puzzle = solution_grid.duplicate(true)
-	var removals = difficulty * 10 #Easy = 20, Hard = 50
-	while removals > 0:
-		var row = randi_range(0,8)
-		var col = randi_range(0,8)
+	var removals = min(difficulty * 4, 64) # Max removals for solvability
+	var positions = []
+	
+	# Precompute all positions and shuffle them
+	for row in range(9):
+		for col in range(9):
+			positions.append(Vector2(row, col))
+	positions.shuffle()
+
+	for pos in positions:
+		if removals <= 0:
+			break
+		var row = pos.x
+		var col = pos.y
 		if puzzle[row][col] != 0:
 			var temp = puzzle[row][col]
 			puzzle[row][col] = 0
-			if not has_unique_solution(puzzle):
-				puzzle[row][col] = temp
+			if not _is_unique_solution(puzzle):
+				puzzle[row][col] = temp # Revert if not unique
 			else:
 				removals -= 1
-				
-				
-func has_unique_solution(puzzle_grid):
+	return puzzle
+	
+
+func _is_unique_solution(puzzle_grid):
 	solution_count = 0
 	try_to_solve_grid(puzzle_grid)
 	return solution_count == 1
+#	
 	
 func try_to_solve_grid(puzzle_grid):
+	if solution_count > 1:
+		return
 	for row in range(GRID_SIZE):
 		for col in range(GRID_SIZE):
 			if puzzle_grid[row][col] == 0:
@@ -76,6 +106,9 @@ func try_to_solve_grid(puzzle_grid):
 	solution_count += 1
 	if solution_count > 1:
 		return
+		
+
+
 
 func get_column(grd, col):
 	var col_list = []
@@ -123,7 +156,25 @@ func create_button(pos:Vector2i):
 	if puzzle[row][col] != 0:
 		button.text = str(puzzle[row][col])
 	button.set("theme_override_font_sizes/font_size", 32)
+	button.set("theme_override_colors/font_color", Color.BLACK)
 	button.custom_minimum_size = Vector2(52,52)
+	
+		# Create a StyleBoxFlat for the button's appearance
+	var stylebox = StyleBoxFlat.new()
+
+	# Set default border widths and colors
+	var border_width = 1
+	var thick_border = 4
+	stylebox.border_color = Color.BLACK
+	stylebox.bg_color = Color.WHITE
+
+	# Adjust border thickness for subgrid boundaries
+	stylebox.border_width_top = border_width if row % 3 != 0 else thick_border
+	stylebox.border_width_bottom = border_width if (row + 1) % 3 != 0 else thick_border
+	stylebox.border_width_left = border_width if col % 3 != 0 else thick_border
+	stylebox.border_width_right = border_width if (col + 1) % 3 != 0 else thick_border
+
+	button.add_theme_stylebox_override("normal", stylebox)
 	
 	button.pressed.connect(_on_grid_button_pressed.bind(pos, ans))
 	
@@ -141,7 +192,34 @@ func bind_selectedGrid_button_actions():
 		b.pressed.connect(_on_selectgrid_button_pressed.bind(int(b.text)))
 		
 
-func _on_selectgrid_button_pressed(numberPressed):
+func _on_numberKey_pressed(keyPressed):
+	var btn = gameGrid[selectedButton[0]][selectedButton[1]] as Button
+	var stylebox:StyleBoxFlat = btn.get_theme_stylebox("normal").duplicate(true)
+	if puzzle[selectedButton[0]][selectedButton[1]] != 0:
+		return
+	
+	if selectedButton != Vector2i(-1,-1):
+		var gridSelectedButton = gameGrid[selectedButton[0]][selectedButton[1]]
+		if keyPressed == 0:
+			gridSelectedButton.text = ''
+			stylebox.bg_color = Color.WHITE
+		else: 
+			gridSelectedButton.text = str(keyPressed)
+
+	if Settings.SHOW_HINTS and keyPressed != 0:
+		var result_match = (keyPressed == select_button_answer)
+
+		if result_match == true:
+			stylebox.bg_color = Color.SEA_GREEN
+		else:
+			stylebox.bg_color = Color.DARK_RED
+	btn.add_theme_stylebox_override("normal", stylebox)
+
+func _on_selectgrid_button_pressed(numberPressed: int):
+	
+	if puzzle[selectedButton[0]][selectedButton[1]] != 0:
+		return
+	
 	if selectedButton != Vector2i(-1,-1):
 		var gridSelectedButton = gameGrid[selectedButton[0]][selectedButton[1]]
 		gridSelectedButton.text = str(numberPressed)
@@ -165,5 +243,3 @@ func _generate_sudoku_soln():
 		randomize()
 		row.shuffle()
 		solution_grid.append(row)
-	
-	print(solution_grid)
