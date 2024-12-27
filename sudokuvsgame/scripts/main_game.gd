@@ -4,9 +4,12 @@ extends Node2D
 
 var gameGrid = []
 var puzzle = []
+var playablePuzzle = []
+var alreadyScoredTable = []
 var permanantNums = []
 var solution_grid = []
 var selectedButton:Vector2i = Vector2(-1, -1)
+var playerScore = 0
 
 const GRID_SIZE = 9
 var solution_count = 0
@@ -27,6 +30,14 @@ func init_game():
 	_fill_grid(solution_grid)
 	_create_puzzle(Settings.DIFFICULTY)
 	_populate_grid()
+	_populateAlreadyScoreTable()
+	
+func _populateAlreadyScoreTable():
+	for i in range(GRID_SIZE):
+		var row = []
+		for j in range(GRID_SIZE):
+			row.append(false)
+		alreadyScoredTable.append(row)
 	
 func _populate_grid():
 	gameGrid = []
@@ -82,6 +93,7 @@ func _create_puzzle(difficulty):
 				puzzle[row][col] = temp # Revert if not unique
 			else:
 				removals -= 1
+	playablePuzzle = puzzle.duplicate(true)
 	return puzzle
 	
 
@@ -200,6 +212,11 @@ func _on_numberKey_pressed(keyPressed):
 	
 	if selectedButton != Vector2i(-1,-1):
 		var gridSelectedButton = gameGrid[selectedButton[0]][selectedButton[1]]
+		playablePuzzle[selectedButton[0]][selectedButton[1]] = keyPressed
+		if keyPressed == select_button_answer and not alreadyScoredTable[selectedButton[0]][selectedButton[1]]:
+			playerScore += calculate_difficulty_score(playablePuzzle, selectedButton[1], selectedButton[0])
+			alreadyScoredTable[selectedButton[0]][selectedButton[1]] = true
+		print('player score', playerScore)
 		if keyPressed == 0:
 			gridSelectedButton.text = ''
 			stylebox.bg_color = Color.WHITE
@@ -222,6 +239,9 @@ func _on_selectgrid_button_pressed(numberPressed: int):
 	
 	if selectedButton != Vector2i(-1,-1):
 		var gridSelectedButton = gameGrid[selectedButton[0]][selectedButton[1]]
+		playablePuzzle[selectedButton[0]][selectedButton[1]] = numberPressed
+		if numberPressed == select_button_answer:
+			playerScore += calculate_difficulty_score(playablePuzzle, selectedButton[1], selectedButton[0])
 		gridSelectedButton.text = str(numberPressed)
 	
 	if Settings.SHOW_HINTS:
@@ -243,3 +263,18 @@ func _generate_sudoku_soln():
 		randomize()
 		row.shuffle()
 		solution_grid.append(row)
+		
+func count_candidates(grd, row, col):
+	if grd[row][col] != 0:
+		return 0  # Already filled cell
+	var candidates = 0
+	for num in range(1, 10):
+		if is_valid(grd, row, col, num):
+			candidates += 1
+	return candidates
+
+func calculate_difficulty_score(grd, row, col):
+	var candidates = count_candidates(grd, row, col)
+	if candidates == 0:
+		return 1  # No valid move (shouldn't happen for a valid puzzle)
+	return 10 - candidates  # Fewer candidates = higher score
