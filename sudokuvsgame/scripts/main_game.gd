@@ -14,6 +14,7 @@ var playerTurn = true
 var enemyTimer : Timer = Timer.new()
 var enemyTurn = false
 var playerScore = 0
+var AI_MOVE_DELAY = 3
 
 const GRID_SIZE = 9
 var solution_count = 0
@@ -45,6 +46,16 @@ func _process(delta: float) -> void:
 	# Format as MM:SS (e.g., 02:05)
 	$PlayerTimerLabel.text = "%02d:%02d" % [player_minutes, player_seconds]
 	$EnemyTimerLabel.text = "%02d:%02d" % [enemy_minutes, enemy_seconds]
+	
+	if enemyTurn:
+		toggle_timer_pause(enemyTimer, false)
+		toggle_timer_pause(playerTimer, true)
+		_playAIMove()
+	
+	if playerTurn:
+		toggle_timer_pause(playerTimer, false)
+		toggle_timer_pause(enemyTimer, true)
+	
 	pass
 
 func init_game():
@@ -55,6 +66,24 @@ func init_game():
 	_populateAlreadyScoreTable()
 	_createPlayerTimer()
 	_createEnemyTimer()
+	
+func toggle_timer_pause(timer: Timer, pauseTimer: bool):
+	if pauseTimer:
+		timer.set_paused(true)
+	else: 
+		timer.set_paused(false)
+		timer.start(timer.get_time_left())	
+	
+func _playAIMove():
+	var aiMove = await ai_Move()
+	if aiMove:
+		print('MOVING')
+		
+func ai_Move():
+	await get_tree().create_timer(5).timeout
+	#Determine AI Move
+	enemyTurn = false
+	playerTurn = true
 	
 func _createPlayerTimer():
 	add_child(playerTimer)
@@ -67,6 +96,7 @@ func _createEnemyTimer():
 	add_child(enemyTimer)
 	enemyTimer.one_shot = true
 	enemyTimer.autostart = false
+	enemyTimer.set_paused(true)
 	enemyTimer.timeout.connect(_enemyTimer_Timeout)
 	enemyTimer.start(((0.4667 + (0.22 * (Settings.DIFFICULTY * 4))) * 60) / 2)
 	
@@ -254,7 +284,7 @@ func bind_selectedGrid_button_actions():
 func _on_numberKey_pressed(keyPressed):
 	var btn = gameGrid[selectedButton[0]][selectedButton[1]] as Button
 	var stylebox:StyleBoxFlat = btn.get_theme_stylebox("normal").duplicate(true)
-	if puzzle[selectedButton[0]][selectedButton[1]] != 0:
+	if puzzle[selectedButton[0]][selectedButton[1]] != 0 or enemyTurn:
 		return
 	
 	if selectedButton != Vector2i(-1,-1):
@@ -281,9 +311,12 @@ func _on_numberKey_pressed(keyPressed):
 		else:
 			stylebox.bg_color = Color.DARK_RED
 	btn.add_theme_stylebox_override("normal", stylebox)
+	
+	playerTurn = false
+	enemyTurn = true
 
 func _on_selectgrid_button_pressed(numberPressed: int):
-	if puzzle[selectedButton[0]][selectedButton[1]] != 0:
+	if puzzle[selectedButton[0]][selectedButton[1]] != 0 or enemyTurn:
 		return
 	
 	if selectedButton != Vector2i(-1,-1):
@@ -295,6 +328,9 @@ func _on_selectgrid_button_pressed(numberPressed: int):
 			playerScore += calculate_difficulty_score(playablePuzzle, selectedButton[1], selectedButton[0])
 			_checkGameWin()
 		gridSelectedButton.text = str(numberPressed)
+		
+	playerTurn = false
+	enemyTurn = true
 	
 	if Settings.SHOW_HINTS:
 		var result_match = (numberPressed == select_button_answer)
