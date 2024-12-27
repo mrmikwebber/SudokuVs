@@ -6,6 +6,7 @@ var gameGrid = []
 var puzzle = []
 var playablePuzzle = []
 var alreadyScoredTable = []
+var aiPuzzle = []
 var permanantNums = []
 var solution_grid = []
 var selectedButton:Vector2i = Vector2(-1, -1)
@@ -14,6 +15,7 @@ var playerTurn = true
 var enemyTimer : Timer = Timer.new()
 var enemyTurn = false
 var playerScore = 0
+var aiScore = 0
 var AI_MOVE_DELAY = 3
 
 const GRID_SIZE = 9
@@ -75,15 +77,42 @@ func toggle_timer_pause(timer: Timer, pauseTimer: bool):
 		timer.start(timer.get_time_left())	
 	
 func _playAIMove():
+	enemyTurn = false
 	var aiMove = await ai_Move()
 	if aiMove:
 		print('MOVING')
-		
+	return
+
 func ai_Move():
 	await get_tree().create_timer(5).timeout
 	#Determine AI Move
-	enemyTurn = false
-	playerTurn = true
+	
+	var ans = find_forced_move(aiPuzzle)
+	if ans == null:
+		return false
+	
+	var row = ans[0]
+	var col = ans[1]
+	var num = ans[2]
+	aiPuzzle[row][col] = num
+	print('AI Placed', num, " at (", row, ",", col, ")")
+	_on_ai_place_number(row, col, num) 
+	return true;
+	
+func find_forced_move(puzzle_grid):
+	for row in range(9):
+		for col in range(9):
+			if puzzle_grid[row][col] == 0:
+				# Count possible numbers
+				var candidates = []
+				for num in range(1,10):
+					if is_valid(puzzle_grid, row, col, num):
+						candidates.append(num)
+				if candidates.size() == 1:
+					# This is a forced move
+					return [row, col, candidates[0]]
+	return null  # No forced move found
+	
 	
 func _createPlayerTimer():
 	add_child(playerTimer)
@@ -171,6 +200,7 @@ func _create_puzzle(difficulty):
 			else:
 				removals -= 1
 	playablePuzzle = puzzle.duplicate(true)
+	aiPuzzle = puzzle.duplicate(true)
 	return puzzle
 	
 
@@ -293,6 +323,7 @@ func _on_numberKey_pressed(keyPressed):
 			playerTimer.start(playerTimer.get_time_left() - 10)
 		var gridSelectedButton = gameGrid[selectedButton[0]][selectedButton[1]]
 		playablePuzzle[selectedButton[0]][selectedButton[1]] = keyPressed
+		aiPuzzle[selectedButton[0]][selectedButton[1]] = keyPressed
 		if keyPressed == select_button_answer and not alreadyScoredTable[selectedButton[0]][selectedButton[1]]:
 			playerScore += calculate_difficulty_score(playablePuzzle, selectedButton[1], selectedButton[0])
 			alreadyScoredTable[selectedButton[0]][selectedButton[1]] = true
@@ -324,8 +355,10 @@ func _on_selectgrid_button_pressed(numberPressed: int):
 		if numberPressed != select_button_answer:
 			playerTimer.start(playerTimer.get_time_left() - 10)
 		playablePuzzle[selectedButton[0]][selectedButton[1]] = numberPressed
+		aiPuzzle[selectedButton[0]][selectedButton[1]] = numberPressed
 		if numberPressed == select_button_answer and not alreadyScoredTable[selectedButton[0]][selectedButton[1]]:
 			playerScore += calculate_difficulty_score(playablePuzzle, selectedButton[1], selectedButton[0])
+			alreadyScoredTable[selectedButton[0]][selectedButton[1]] = true
 			_checkGameWin()
 		gridSelectedButton.text = str(numberPressed)
 		
@@ -341,6 +374,37 @@ func _on_selectgrid_button_pressed(numberPressed: int):
 			stylebox.bg_color = Color.SEA_GREEN
 		else:
 			stylebox.bg_color = Color.DARK_RED
+		btn.add_theme_stylebox_override("normal", stylebox)
+		
+func _on_ai_place_number(row, col, num):
+	if puzzle[row][col] != 0 or playerTurn:
+		return
+	
+	var gridSelectedButton = gameGrid[row][col]
+	if num != solution_grid[row][col]:
+		enemyTimer.start(playerTimer.get_time_left() - 10)
+		enemyTurn = false
+		playerTurn = true
+		
+	aiPuzzle[row][col] = num
+	if num == solution_grid[row][col] and not alreadyScoredTable[row][col]:
+		aiScore += calculate_difficulty_score(playablePuzzle, col, row)
+		alreadyScoredTable[row][col] = true
+		_checkGameWin()
+	gridSelectedButton.text = str(num)
+		
+	enemyTurn = false
+	playerTurn = true
+	
+	if Settings.SHOW_HINTS:
+		var result_match = (num == solution_grid[row][col])
+		var btn = gameGrid[row][col] as Button
+		
+		var stylebox:StyleBoxFlat = btn.get_theme_stylebox("normal").duplicate(true)
+		if result_match == true:
+			stylebox.bg_color = Color.SKY_BLUE
+		else:
+			stylebox.bg_color = Color.CORAL
 		btn.add_theme_stylebox_override("normal", stylebox)
 		
 func _generate_sudoku_soln():
