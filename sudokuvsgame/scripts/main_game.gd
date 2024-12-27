@@ -84,24 +84,60 @@ func _playAIMove():
 	return
 
 func ai_Move():
-	await get_tree().create_timer(5).timeout
+	var rng = RandomNumberGenerator.new()
+	
+	await get_tree().create_timer(rng.randf_range(0.5, 8)).timeout
 	#Determine AI Move
 	
-	var ans = find_forced_move(aiPuzzle)
-	if ans == null:
+	var ans = find_one_forced_move(aiPuzzle)
+	
+	if Settings.DIFFICULTY > 6:
+		ans = solve_step_by_step(aiPuzzle)
+	
+	if Settings.blunder_only:
+		ans = ai_blunder_move(aiPuzzle)
+		
+	var my_random_number = rng.randf_range(0, 1.0)
+	
+	print(my_random_number)
+	print(Settings.BLUNDER_CHANCE)
+	
+	if my_random_number < Settings.BLUNDER_CHANCE:
+		ans = ai_blunder_move(aiPuzzle)
+	
+	if ans.size() == 0:
 		return false
 	
 	var row = ans[0]
 	var col = ans[1]
 	var num = ans[2]
-	aiPuzzle[row][col] = num
 	print('AI Placed', num, " at (", row, ",", col, ")")
 	_on_ai_place_number(row, col, num) 
 	return true;
 	
-func find_forced_move(puzzle_grid):
-	for row in range(9):
-		for col in range(9):
+func ai_blunder_move(puzzle_grid):
+	var empty_cells = get_empty_cells(puzzle_grid)
+	if empty_cells.size() == 0:
+		return false
+	var random_cell = empty_cells[randi() % empty_cells.size()]
+	var row = random_cell[0]
+	var col = random_cell[1]
+	
+	var guess_num = randi_range(1,GRID_SIZE)
+	return [row, col, guess_num]
+
+func get_empty_cells(puzzle_grid):
+	var empty_cells = []
+	for row in range(GRID_SIZE):
+		for col in range(GRID_SIZE):
+			if puzzle_grid[row][col] == 0:
+				empty_cells.append(Vector2(row, col))
+	return empty_cells
+
+	
+func find_one_forced_move(puzzle_grid):
+	for row in range(GRID_SIZE):
+		for col in range(GRID_SIZE):
 			if puzzle_grid[row][col] == 0:
 				# Count possible numbers
 				var candidates = []
@@ -111,7 +147,48 @@ func find_forced_move(puzzle_grid):
 				if candidates.size() == 1:
 					# This is a forced move
 					return [row, col, candidates[0]]
-	return null  # No forced move found
+	return []  # No forced move found
+	
+func solve_step_by_step(puzzle_grid):
+	while true:
+		var move = find_one_forced_move(puzzle_grid)
+		if move.size() == 0:
+			break
+		var row = move[0]
+		var col = move[1]
+		var num = move[2]
+		return [row, col, num] 
+	
+	var bestPoint = find_cell_with_fewest_candidates(puzzle_grid)
+	var best_row = bestPoint[0]
+	var best_col = bestPoint[1]
+	if best_row == -1:
+		return false
+		
+	var candidates = get_valid_candidates(grid, best_row, best_col)
+	for candidate in candidates:
+		return [best_row, best_col, candidate]
+	# If no candidate leads to a solution, return false
+	return false
+	
+		
+func find_cell_with_fewest_candidates(puzzle_grid) -> Vector2:
+	var best_row = -1
+	var best_col = -1
+	var min_count = GRID_SIZE + 1  # More than max possible (9)
+
+	for row in range(GRID_SIZE):
+		for col in range(GRID_SIZE):
+			if puzzle_grid[row][col] == 0:
+				var count = 0
+				for num in range(1, 10):
+					if is_valid(puzzle_grid, row, col, num):
+						count += 1
+				if count < min_count:
+					min_count = count
+					best_row = row
+					best_col = col
+	return Vector2(best_row, best_col)
 	
 	
 func _createPlayerTimer():
@@ -182,8 +259,8 @@ func _create_puzzle(difficulty):
 	var positions = []
 	
 	# Precompute all positions and shuffle them
-	for row in range(9):
-		for col in range(9):
+	for row in range(GRID_SIZE):
+		for col in range(GRID_SIZE):
 			positions.append(Vector2(row, col))
 	positions.shuffle()
 
@@ -226,7 +303,20 @@ func try_to_solve_grid(puzzle_grid):
 	if solution_count > 1:
 		return
 		
-
+func try_to_solve_grid_ai(puzzle_grid):
+	for row in range(GRID_SIZE):
+		for col in range(GRID_SIZE):
+			if puzzle_grid[row][col] == 0:
+				for num in range(1,10):
+					if is_valid(puzzle_grid, row, col, num):
+						return
+						puzzle_grid[row][col] = num
+						try_to_solve_grid_ai(puzzle_grid)
+						puzzle_grid[row][col] = 0
+				return
+	solution_count += 1
+	if solution_count > 1:
+		return
 
 
 func get_column(grd, col):
@@ -320,13 +410,18 @@ func _on_numberKey_pressed(keyPressed):
 	if selectedButton != Vector2i(-1,-1):
 		
 		if keyPressed != select_button_answer and keyPressed != 0:
+			if playerTimer.get_time_left() - 10 < 0:
+				print('You Lose! Your Time Ran Out')
+				print('Youre Score is: ', "%0.4d" % playerScore)
+				print('AI Score is: ', "%0.4d" % aiScore)
+				get_tree().quit()
 			playerTimer.start(playerTimer.get_time_left() - 10)
 		var gridSelectedButton = gameGrid[selectedButton[0]][selectedButton[1]]
 		playablePuzzle[selectedButton[0]][selectedButton[1]] = keyPressed
-		aiPuzzle[selectedButton[0]][selectedButton[1]] = keyPressed
-		if keyPressed == select_button_answer and not alreadyScoredTable[selectedButton[0]][selectedButton[1]]:
+		if keyPressed == select_button_answer and not alreadyScoredTable[selectedButton[0]][selectedButton[1]] and not keyPressed == 0:
 			playerScore += calculate_difficulty_score(playablePuzzle, selectedButton[1], selectedButton[0])
 			alreadyScoredTable[selectedButton[0]][selectedButton[1]] = true
+			aiPuzzle[selectedButton[0]][selectedButton[1]] = keyPressed
 			_checkGameWin()
 		if keyPressed == 0:
 			gridSelectedButton.text = ''
@@ -343,8 +438,9 @@ func _on_numberKey_pressed(keyPressed):
 			stylebox.bg_color = Color.DARK_RED
 	btn.add_theme_stylebox_override("normal", stylebox)
 	
-	playerTurn = false
-	enemyTurn = true
+	if keyPressed != 0:
+		playerTurn = false
+		enemyTurn = true
 
 func _on_selectgrid_button_pressed(numberPressed: int):
 	if puzzle[selectedButton[0]][selectedButton[1]] != 0 or enemyTurn:
@@ -353,12 +449,17 @@ func _on_selectgrid_button_pressed(numberPressed: int):
 	if selectedButton != Vector2i(-1,-1):
 		var gridSelectedButton = gameGrid[selectedButton[0]][selectedButton[1]]
 		if numberPressed != select_button_answer:
+			if playerTimer.get_time_left() - 10 < 0:
+				print('You Lose! Your Time Ran Out')
+				print('Youre Score is: ', "%0.4d" % playerScore)
+				print('AI Score is: ', "%0.4d" % aiScore)
+				get_tree().quit()
 			playerTimer.start(playerTimer.get_time_left() - 10)
 		playablePuzzle[selectedButton[0]][selectedButton[1]] = numberPressed
-		aiPuzzle[selectedButton[0]][selectedButton[1]] = numberPressed
 		if numberPressed == select_button_answer and not alreadyScoredTable[selectedButton[0]][selectedButton[1]]:
 			playerScore += calculate_difficulty_score(playablePuzzle, selectedButton[1], selectedButton[0])
 			alreadyScoredTable[selectedButton[0]][selectedButton[1]] = true
+			aiPuzzle[selectedButton[0]][selectedButton[1]] = numberPressed
 			_checkGameWin()
 		gridSelectedButton.text = str(numberPressed)
 		
@@ -382,14 +483,20 @@ func _on_ai_place_number(row, col, num):
 	
 	var gridSelectedButton = gameGrid[row][col]
 	if num != solution_grid[row][col]:
+		if enemyTimer.get_time_left() - 10 < 0:
+			print('You Win, Enemy Timer Ran Out')
+			print('Youre Score is: ', "%0.4d" % playerScore)
+			print('AI Score is: ', "%0.4d" % aiScore)
+			get_tree().quit()
 		enemyTimer.start(playerTimer.get_time_left() - 10)
 		enemyTurn = false
 		playerTurn = true
 		
-	aiPuzzle[row][col] = num
 	if num == solution_grid[row][col] and not alreadyScoredTable[row][col]:
 		aiScore += calculate_difficulty_score(playablePuzzle, col, row)
 		alreadyScoredTable[row][col] = true
+		aiPuzzle[row][col] = num
+		playablePuzzle[row][col] = num
 		_checkGameWin()
 	gridSelectedButton.text = str(num)
 		
@@ -419,10 +526,18 @@ func _generate_sudoku_soln():
 		
 func _checkGameWin():
 	if playablePuzzle.hash() == solution_grid.hash():
-		print('You Win!')
-		playerScore += (1 + (playerTimer.get_time_left() / 100))
-		print('Youre Score is: ', "%0.2d" % playerScore)
-		get_tree().quit()
+		playerScore += (1 + (playerTimer.get_time_left() / 100)) * 1000
+		aiScore += (1 + (enemyTimer.get_time_left() / 100)) * 1000
+		if playerScore > aiScore:
+			print('You Win!')
+			print('Youre Score is: ', "%0.4d" % playerScore)
+			print('AI Score is: ', "%0.4d" % aiScore)
+			get_tree().quit()
+		else: 
+			print('You Lose!')
+			print('Youre Score is: ', "%0.4d" % playerScore)
+			print('AI Score is: ', "%0.4d" % aiScore)
+			get_tree().quit()
 		
 func count_candidates(grd, row, col):
 	if grd[row][col] != 0:
@@ -432,6 +547,13 @@ func count_candidates(grd, row, col):
 		if is_valid(grd, row, col, num):
 			candidates += 1
 	return candidates
+	
+func get_valid_candidates(grd, row, col) -> Array:
+	var cands = []
+	for num in range(1, 10):
+		if is_valid(grd, row, col, num):
+			cands.append(num)
+	return cands
 
 func calculate_difficulty_score(grd, row, col):
 	var candidates = count_candidates(grd, row, col)
