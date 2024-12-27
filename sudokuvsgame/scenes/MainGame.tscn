@@ -73,12 +73,14 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "9"
 
-[node name="PlayerTimer" type="Timer" parent="."]
-wait_time = 23.449
-autostart = true
-
-[node name="TimerLabel" type="Label" parent="."]
+[node name="PlayerTimerLabel" type="Label" parent="."]
 offset_left = -220.0
 offset_top = 7.0
 offset_right = -100.0
+offset_bottom = 51.0
+
+[node name="EnemyTimerLabel" type="Label" parent="."]
+offset_left = 703.0
+offset_top = 7.0
+offset_right = 823.0
 offset_bottom = 51.0

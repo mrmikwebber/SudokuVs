@@ -9,7 +9,10 @@ var alreadyScoredTable = []
 var permanantNums = []
 var solution_grid = []
 var selectedButton:Vector2i = Vector2(-1, -1)
-var timer : Timer = Timer.new()
+var playerTimer : Timer = Timer.new()
+var playerTurn = true
+var enemyTimer : Timer = Timer.new()
+var enemyTurn = false
 var playerScore = 0
 
 const GRID_SIZE = 9
@@ -25,17 +28,23 @@ func _ready() -> void:
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta: float) -> void:
 	# Get the time left in seconds
-	var time_left = timer.get_time_left()
+	var player_time_left = playerTimer.get_time_left()
+	var enemy_time_left = enemyTimer.get_time_left()
 	
 	# Convert to an integer number of seconds
-	var total_seconds = int(floor(time_left))
+	var player_total_seconds = int(floor(player_time_left))
+	var enemy_total_seconds = int(floor(enemy_time_left))
 	
 	# Calculate minutes and remaining seconds
-	var minutes = total_seconds / 60
-	var seconds = total_seconds % 60
+	var player_minutes = player_total_seconds / 60
+	var player_seconds = player_total_seconds % 60
+	
+	var enemy_minutes = enemy_total_seconds / 60
+	var enemy_seconds = enemy_total_seconds % 60
 	
 	# Format as MM:SS (e.g., 02:05)
-	$TimerLabel.text = "%02d:%02d" % [minutes, seconds]
+	$PlayerTimerLabel.text = "%02d:%02d" % [player_minutes, player_seconds]
+	$EnemyTimerLabel.text = "%02d:%02d" % [enemy_minutes, enemy_seconds]
 	pass
 
 func init_game():
@@ -45,16 +54,28 @@ func init_game():
 	_populate_grid()
 	_populateAlreadyScoreTable()
 	_createPlayerTimer()
+	_createEnemyTimer()
 	
 func _createPlayerTimer():
-	add_child(timer)
-	timer.one_shot = true
-	timer.autostart = false
-	timer.timeout.connect(_playerTimer_Timeout)
-	timer.start((0.4667 + (0.22 * (Settings.DIFFICULTY * 4))) * 60)
+	add_child(playerTimer)
+	playerTimer.one_shot = true
+	playerTimer.autostart = false
+	playerTimer.timeout.connect(_playerTimer_Timeout)
+	playerTimer.start(((0.4667 + (0.22 * (Settings.DIFFICULTY * 4))) * 60) / 2)
+	
+func _createEnemyTimer():
+	add_child(enemyTimer)
+	enemyTimer.one_shot = true
+	enemyTimer.autostart = false
+	enemyTimer.timeout.connect(_enemyTimer_Timeout)
+	enemyTimer.start(((0.4667 + (0.22 * (Settings.DIFFICULTY * 4))) * 60) / 2)
 	
 func _playerTimer_Timeout():
 	print('Game Over')
+	get_tree().quit()
+	
+func _enemyTimer_Timeout():
+	print('You Win!')
 	get_tree().quit()
 	
 func _populateAlreadyScoreTable():
@@ -85,6 +106,7 @@ func _input(ev):
 		if Input.is_key_pressed(KEY_8): _on_numberKey_pressed(8)
 		if Input.is_key_pressed(KEY_9): _on_numberKey_pressed(9)
 		if Input.is_key_pressed(KEY_BACKSPACE): _on_numberKey_pressed(0)
+		if Input.is_key_pressed(KEY_C): playerTimer.set_paused(true)
 
 func _create_empty_grid():
 	solution_grid = []
@@ -238,7 +260,7 @@ func _on_numberKey_pressed(keyPressed):
 	if selectedButton != Vector2i(-1,-1):
 		
 		if keyPressed != select_button_answer and keyPressed != 0:
-			timer.start(timer.get_time_left() - 10)
+			playerTimer.start(playerTimer.get_time_left() - 10)
 		var gridSelectedButton = gameGrid[selectedButton[0]][selectedButton[1]]
 		playablePuzzle[selectedButton[0]][selectedButton[1]] = keyPressed
 		if keyPressed == select_button_answer and not alreadyScoredTable[selectedButton[0]][selectedButton[1]]:
@@ -267,7 +289,7 @@ func _on_selectgrid_button_pressed(numberPressed: int):
 	if selectedButton != Vector2i(-1,-1):
 		var gridSelectedButton = gameGrid[selectedButton[0]][selectedButton[1]]
 		if numberPressed != select_button_answer:
-			timer.start(timer.get_time_left() - 10)
+			playerTimer.start(playerTimer.get_time_left() - 10)
 		playablePuzzle[selectedButton[0]][selectedButton[1]] = numberPressed
 		if numberPressed == select_button_answer and not alreadyScoredTable[selectedButton[0]][selectedButton[1]]:
 			playerScore += calculate_difficulty_score(playablePuzzle, selectedButton[1], selectedButton[0])
@@ -298,7 +320,7 @@ func _generate_sudoku_soln():
 func _checkGameWin():
 	if playablePuzzle.hash() == solution_grid.hash():
 		print('You Win!')
-		playerScore += (1 + (timer.get_time_left() / 100))
+		playerScore += (1 + (playerTimer.get_time_left() / 100))
 		print('Youre Score is: ', "%0.2d" % playerScore)
 		get_tree().quit()
 		
