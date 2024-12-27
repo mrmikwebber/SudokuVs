@@ -9,6 +9,7 @@ var alreadyScoredTable = []
 var permanantNums = []
 var solution_grid = []
 var selectedButton:Vector2i = Vector2(-1, -1)
+var timer : Timer = Timer.new()
 var playerScore = 0
 
 const GRID_SIZE = 9
@@ -23,6 +24,18 @@ func _ready() -> void:
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta: float) -> void:
+	# Get the time left in seconds
+	var time_left = timer.get_time_left()
+	
+	# Convert to an integer number of seconds
+	var total_seconds = int(floor(time_left))
+	
+	# Calculate minutes and remaining seconds
+	var minutes = total_seconds / 60
+	var seconds = total_seconds % 60
+	
+	# Format as MM:SS (e.g., 02:05)
+	$TimerLabel.text = "%02d:%02d" % [minutes, seconds]
 	pass
 
 func init_game():
@@ -31,6 +44,18 @@ func init_game():
 	_create_puzzle(Settings.DIFFICULTY)
 	_populate_grid()
 	_populateAlreadyScoreTable()
+	_createPlayerTimer()
+	
+func _createPlayerTimer():
+	add_child(timer)
+	timer.one_shot = true
+	timer.autostart = false
+	timer.timeout.connect(_playerTimer_Timeout)
+	timer.start((0.4667 + (0.22 * (Settings.DIFFICULTY * 4))) * 60)
+	
+func _playerTimer_Timeout():
+	print('Game Over')
+	get_tree().quit()
 	
 func _populateAlreadyScoreTable():
 	for i in range(GRID_SIZE):
@@ -211,12 +236,15 @@ func _on_numberKey_pressed(keyPressed):
 		return
 	
 	if selectedButton != Vector2i(-1,-1):
+		
+		if keyPressed != select_button_answer and keyPressed != 0:
+			timer.start(timer.get_time_left() - 10)
 		var gridSelectedButton = gameGrid[selectedButton[0]][selectedButton[1]]
 		playablePuzzle[selectedButton[0]][selectedButton[1]] = keyPressed
 		if keyPressed == select_button_answer and not alreadyScoredTable[selectedButton[0]][selectedButton[1]]:
 			playerScore += calculate_difficulty_score(playablePuzzle, selectedButton[1], selectedButton[0])
 			alreadyScoredTable[selectedButton[0]][selectedButton[1]] = true
-		print('player score', playerScore)
+			_checkGameWin()
 		if keyPressed == 0:
 			gridSelectedButton.text = ''
 			stylebox.bg_color = Color.WHITE
@@ -233,15 +261,17 @@ func _on_numberKey_pressed(keyPressed):
 	btn.add_theme_stylebox_override("normal", stylebox)
 
 func _on_selectgrid_button_pressed(numberPressed: int):
-	
 	if puzzle[selectedButton[0]][selectedButton[1]] != 0:
 		return
 	
 	if selectedButton != Vector2i(-1,-1):
 		var gridSelectedButton = gameGrid[selectedButton[0]][selectedButton[1]]
+		if numberPressed != select_button_answer:
+			timer.start(timer.get_time_left() - 10)
 		playablePuzzle[selectedButton[0]][selectedButton[1]] = numberPressed
-		if numberPressed == select_button_answer:
+		if numberPressed == select_button_answer and not alreadyScoredTable[selectedButton[0]][selectedButton[1]]:
 			playerScore += calculate_difficulty_score(playablePuzzle, selectedButton[1], selectedButton[0])
+			_checkGameWin()
 		gridSelectedButton.text = str(numberPressed)
 	
 	if Settings.SHOW_HINTS:
@@ -263,6 +293,14 @@ func _generate_sudoku_soln():
 		randomize()
 		row.shuffle()
 		solution_grid.append(row)
+		
+		
+func _checkGameWin():
+	if playablePuzzle.hash() == solution_grid.hash():
+		print('You Win!')
+		playerScore += (1 + (timer.get_time_left() / 100))
+		print('Youre Score is: ', "%0.2d" % playerScore)
+		get_tree().quit()
 		
 func count_candidates(grd, row, col):
 	if grd[row][col] != 0:
