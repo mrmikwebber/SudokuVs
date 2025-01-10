@@ -6,6 +6,7 @@ var gameGrid = []
 var puzzle = []
 var playablePuzzle = []
 var alreadyScoredTable = []
+var staticScoredTable = []
 var aiPuzzle = []
 var permanantNums = []
 var solution_grid = []
@@ -15,7 +16,12 @@ var playerTurn = true
 var enemyTimer : Timer = Timer.new()
 var enemyTurn = false
 var playerScore = 0
+var numberOfAIBeat = 0
+var currentFloor = 1
+var currentRoom = 1
 var aiScore = 0
+var playerCheckButtonPressedCount = 0
+var aiCheckButtonPressedCount = 0
 var AI_MOVE_DELAY = 3
 
 const GRID_SIZE = 9
@@ -25,7 +31,9 @@ var select_button_answer = 0
 # Called when the node enters the scene tree for the first time.
 func _ready() -> void:
 	bind_selectedGrid_button_actions()
-	init_game()
+	updateStaticLabels()
+	setupCheckButton()
+	init_game(Settings.STARTING_DIFFICULTY)
 
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
@@ -52,22 +60,71 @@ func _process(delta: float) -> void:
 	if enemyTurn:
 		toggle_timer_pause(enemyTimer, false)
 		toggle_timer_pause(playerTimer, true)
+		$CheckButton.disabled = true
 		_playAIMove()
 	
 	if playerTurn:
 		toggle_timer_pause(playerTimer, false)
 		toggle_timer_pause(enemyTimer, true)
+		$CheckButton.disabled = false
 	
 	pass
 
-func init_game():
+func reset_game():
+	clear_grid()
+	gameGrid = []
+	puzzle = []
+	playablePuzzle = []
+	alreadyScoredTable = []
+	staticScoredTable = []
+	aiPuzzle = []
+	permanantNums = []
+	solution_grid = []
+	selectedButton = Vector2(-1, -1)
+	playerTurn = true
+	enemyTimer = Timer.new()
+	enemyTurn = false
+	playerScore = 0
+	aiScore = 0
+	AI_MOVE_DELAY = 3
+	solution_count = 0
+	select_button_answer = 0
+
+func setupCheckButton():
+	$CheckButton.pressed.connect(_checkButtonPressed)
+	
+func _checkButtonPressed():
+	playerCheckButtonPressedCount += 1
+	playerTimer.start(playerTimer.get_time_left() - (playerCheckButtonPressedCount * 8))
+	checkBoard(playablePuzzle, Color.SEA_GREEN, Color.DARK_RED)
+				 
+func checkBoard(checkedPuzzle, correctColor, incorrectColor):
+	for row in range(GRID_SIZE):
+		for col in range(GRID_SIZE):
+			var btn = gameGrid[row][col] as Button
+			var stylebox:StyleBoxFlat = btn.get_theme_stylebox("normal").duplicate(true)
+			if puzzle[row][col] == 0 and checkedPuzzle[row][col] != 0:
+				if checkedPuzzle[row][col] == solution_grid[row][col]:
+					stylebox.bg_color = correctColor
+				else:
+					stylebox.bg_color = incorrectColor
+				btn.add_theme_stylebox_override("normal", stylebox)
+
+func init_game(difficulty: int):
+	print("Starting Game with Difficulty ", difficulty)
 	_create_empty_grid()
 	_fill_grid(solution_grid)
-	_create_puzzle(Settings.DIFFICULTY)
+	_create_puzzle(Settings.STARTING_DIFFICULTY)
 	_populate_grid()
 	_populateAlreadyScoreTable()
-	_createPlayerTimer()
+	if numberOfAIBeat == 0:
+		_createPlayerTimer()
 	_createEnemyTimer()
+	print(playablePuzzle)
+	
+func updateStaticLabels():
+	$CurrentRoom.text = "Current Room: " + str(currentRoom)
+	$CurrentFloor.text = "Current Floor: " + str(currentFloor)
 	
 func toggle_timer_pause(timer: Timer, pauseTimer: bool):
 	if pauseTimer:
@@ -91,18 +148,28 @@ func ai_Move():
 	
 	var ans = find_one_forced_move(aiPuzzle)
 	
-	if Settings.DIFFICULTY > 6:
+	if Settings.STARTING_DIFFICULTY > 6:
 		ans = solve_step_by_step(aiPuzzle)
 	
 	if Settings.blunder_only:
 		ans = ai_blunder_move(aiPuzzle)
 		
-	var my_random_number = rng.randf_range(0, 1.0)
+	var blunderChance = rng.randf_range(0, 1.0)
+	var checkBoardChance = rng.randf_range(0, 1.0)
 	
-	print(my_random_number)
+	
+	print(blunderChance)
 	print(Settings.BLUNDER_CHANCE)
+	print('-----------------')
+	print(checkBoardChance)
+	print(Settings.CHECK_BOARD_CHANCE)
 	
-	if my_random_number < Settings.BLUNDER_CHANCE:
+	if checkBoardChance < Settings.CHECK_BOARD_CHANCE:
+		aiCheckButtonPressedCount += 1
+		enemyTimer.start(enemyTimer.get_time_left() - (aiCheckButtonPressedCount * 8))
+		checkBoard(aiPuzzle, Color.SKY_BLUE, Color.CORAL)
+	
+	if blunderChance < Settings.BLUNDER_CHANCE:
 		ans = ai_blunder_move(aiPuzzle)
 	
 	if ans.size() == 0:
@@ -138,7 +205,7 @@ func get_empty_cells(puzzle_grid):
 func find_one_forced_move(puzzle_grid):
 	for row in range(GRID_SIZE):
 		for col in range(GRID_SIZE):
-			if puzzle_grid[row][col] == 0:
+			if puzzle_grid[row][col] == 0 and not alreadyScoredTable[row][col]:
 				# Count possible numbers
 				var candidates = []
 				for num in range(1,10):
@@ -157,6 +224,7 @@ func solve_step_by_step(puzzle_grid):
 		var row = move[0]
 		var col = move[1]
 		var num = move[2]
+		print('Forced Moved Returning')
 		return [row, col, num] 
 	
 	var bestPoint = find_cell_with_fewest_candidates(puzzle_grid)
@@ -167,6 +235,7 @@ func solve_step_by_step(puzzle_grid):
 		
 	var candidates = get_valid_candidates(grid, best_row, best_col)
 	for candidate in candidates:
+		print("Complicated returning")
 		return [best_row, best_col, candidate]
 	# If no candidate leads to a solution, return false
 	return false
@@ -179,7 +248,7 @@ func find_cell_with_fewest_candidates(puzzle_grid) -> Vector2:
 
 	for row in range(GRID_SIZE):
 		for col in range(GRID_SIZE):
-			if puzzle_grid[row][col] == 0:
+			if puzzle_grid[row][col] == 0 and not alreadyScoredTable[row][col]:
 				var count = 0
 				for num in range(1, 10):
 					if is_valid(puzzle_grid, row, col, num):
@@ -196,7 +265,7 @@ func _createPlayerTimer():
 	playerTimer.one_shot = true
 	playerTimer.autostart = false
 	playerTimer.timeout.connect(_playerTimer_Timeout)
-	playerTimer.start(((0.4667 + (0.22 * (Settings.DIFFICULTY * 4))) * 60) / 2)
+	playerTimer.start(Settings.PLAYER_TIME * 60)
 	
 func _createEnemyTimer():
 	add_child(enemyTimer)
@@ -204,7 +273,13 @@ func _createEnemyTimer():
 	enemyTimer.autostart = false
 	enemyTimer.set_paused(true)
 	enemyTimer.timeout.connect(_enemyTimer_Timeout)
-	enemyTimer.start(((0.4667 + (0.22 * (Settings.DIFFICULTY * 4))) * 60) / 2)
+	enemyTimer.start(((0.4667 + (0.22 * (Settings.STARTING_DIFFICULTY * 4))) * 60) / 2)
+	
+func incrementRoom():
+	currentRoom += 1
+	if currentRoom == 5:
+		currentFloor += 1
+		currentRoom = 1
 	
 func _playerTimer_Timeout():
 	print('Game Over')
@@ -212,13 +287,22 @@ func _playerTimer_Timeout():
 	
 func _enemyTimer_Timeout():
 	print('You Win!')
-	get_tree().quit()
+	print('Youre Score is: ', "%0.4d" % playerScore)
+	print('AI Score is: ', "%0.4d" % aiScore)
+	numberOfAIBeat += 1
+	incrementRoom()
+	updateStaticLabels()
+	reset_game()
+	init_game(Settings.STARTING_DIFFICULTY + 1) 
 	
 func _populateAlreadyScoreTable():
 	for i in range(GRID_SIZE):
 		var row = []
 		for j in range(GRID_SIZE):
-			row.append(false)
+			if puzzle[i][j] != 0:
+				row.append(true)
+			else:
+				row.append(false)
 		alreadyScoredTable.append(row)
 	
 func _populate_grid():
@@ -318,6 +402,10 @@ func try_to_solve_grid_ai(puzzle_grid):
 	if solution_count > 1:
 		return
 
+func clear_grid():
+	for n in grid.get_children():
+		grid.remove_child(n)
+		n.queue_free()
 
 func get_column(grd, col):
 	var col_list = []
@@ -404,7 +492,7 @@ func bind_selectedGrid_button_actions():
 func _on_numberKey_pressed(keyPressed):
 	var btn = gameGrid[selectedButton[0]][selectedButton[1]] as Button
 	var stylebox:StyleBoxFlat = btn.get_theme_stylebox("normal").duplicate(true)
-	if puzzle[selectedButton[0]][selectedButton[1]] != 0 or enemyTurn:
+	if puzzle[selectedButton[0]][selectedButton[1]] != 0 or enemyTurn or alreadyScoredTable[selectedButton[0]][selectedButton[1]]:
 		return
 	
 	if selectedButton != Vector2i(-1,-1):
@@ -414,14 +502,15 @@ func _on_numberKey_pressed(keyPressed):
 				print('You Lose! Your Time Ran Out')
 				print('Youre Score is: ', "%0.4d" % playerScore)
 				print('AI Score is: ', "%0.4d" % aiScore)
+				print('You beat ', numberOfAIBeat, ' AI')
 				get_tree().quit()
 			playerTimer.start(playerTimer.get_time_left() - 10)
 		var gridSelectedButton = gameGrid[selectedButton[0]][selectedButton[1]]
 		playablePuzzle[selectedButton[0]][selectedButton[1]] = keyPressed
 		if keyPressed == select_button_answer and not alreadyScoredTable[selectedButton[0]][selectedButton[1]] and not keyPressed == 0:
+			print(alreadyScoredTable[selectedButton[0]][selectedButton[1]])
 			playerScore += calculate_difficulty_score(playablePuzzle, selectedButton[1], selectedButton[0])
 			alreadyScoredTable[selectedButton[0]][selectedButton[1]] = true
-			aiPuzzle[selectedButton[0]][selectedButton[1]] = keyPressed
 			_checkGameWin()
 		if keyPressed == 0:
 			gridSelectedButton.text = ''
@@ -448,61 +537,43 @@ func _on_selectgrid_button_pressed(numberPressed: int):
 	
 	if selectedButton != Vector2i(-1,-1):
 		var gridSelectedButton = gameGrid[selectedButton[0]][selectedButton[1]]
+		gridSelectedButton.text = str(numberPressed)
+		
+		if Settings.SHOW_HINTS:
+			var result_match = (numberPressed == select_button_answer)
+			var btn = gameGrid[selectedButton[0]][selectedButton[1]] as Button
+			
+			var stylebox:StyleBoxFlat = btn.get_theme_stylebox("normal").duplicate(true)
+			if result_match == true:
+				stylebox.bg_color = Color.SEA_GREEN
+			else:
+				stylebox.bg_color = Color.DARK_RED
+			btn.add_theme_stylebox_override("normal", stylebox)
+		
 		if numberPressed != select_button_answer:
 			if playerTimer.get_time_left() - 10 < 0:
 				print('You Lose! Your Time Ran Out')
 				print('Youre Score is: ', "%0.4d" % playerScore)
 				print('AI Score is: ', "%0.4d" % aiScore)
 				get_tree().quit()
+				init_game(Settings.STARTING_DIFFICULTY + 1)
 			playerTimer.start(playerTimer.get_time_left() - 10)
 		playablePuzzle[selectedButton[0]][selectedButton[1]] = numberPressed
 		if numberPressed == select_button_answer and not alreadyScoredTable[selectedButton[0]][selectedButton[1]]:
 			playerScore += calculate_difficulty_score(playablePuzzle, selectedButton[1], selectedButton[0])
 			alreadyScoredTable[selectedButton[0]][selectedButton[1]] = true
-			aiPuzzle[selectedButton[0]][selectedButton[1]] = numberPressed
 			_checkGameWin()
-		gridSelectedButton.text = str(numberPressed)
 		
 	playerTurn = false
 	enemyTurn = true
-	
-	if Settings.SHOW_HINTS:
-		var result_match = (numberPressed == select_button_answer)
-		var btn = gameGrid[selectedButton[0]][selectedButton[1]] as Button
-		
-		var stylebox:StyleBoxFlat = btn.get_theme_stylebox("normal").duplicate(true)
-		if result_match == true:
-			stylebox.bg_color = Color.SEA_GREEN
-		else:
-			stylebox.bg_color = Color.DARK_RED
-		btn.add_theme_stylebox_override("normal", stylebox)
 		
 func _on_ai_place_number(row, col, num):
 	if puzzle[row][col] != 0 or playerTurn:
 		return
 	
-	var gridSelectedButton = gameGrid[row][col]
-	if num != solution_grid[row][col]:
-		if enemyTimer.get_time_left() - 10 < 0:
-			print('You Win, Enemy Timer Ran Out')
-			print('Youre Score is: ', "%0.4d" % playerScore)
-			print('AI Score is: ', "%0.4d" % aiScore)
-			get_tree().quit()
-		enemyTimer.start(playerTimer.get_time_left() - 10)
-		enemyTurn = false
-		playerTurn = true
-		
-	if num == solution_grid[row][col] and not alreadyScoredTable[row][col]:
-		aiScore += calculate_difficulty_score(playablePuzzle, col, row)
-		alreadyScoredTable[row][col] = true
-		aiPuzzle[row][col] = num
-		playablePuzzle[row][col] = num
-		_checkGameWin()
-	gridSelectedButton.text = str(num)
-		
-	enemyTurn = false
-	playerTurn = true
 	
+	var gridSelectedButton = gameGrid[row][col]
+	gridSelectedButton.text = str(num)
 	if Settings.SHOW_HINTS:
 		var result_match = (num == solution_grid[row][col])
 		var btn = gameGrid[row][col] as Button
@@ -513,6 +584,28 @@ func _on_ai_place_number(row, col, num):
 		else:
 			stylebox.bg_color = Color.CORAL
 		btn.add_theme_stylebox_override("normal", stylebox)
+	if num != solution_grid[row][col]:
+		if enemyTimer.get_time_left() - 10 < 0:
+			print('You Win, Enemy Timer Ran Out')
+			print('Youre Score is: ', "%0.4d" % playerScore)
+			print('AI Score is: ', "%0.4d" % aiScore)
+			numberOfAIBeat += 1
+			incrementRoom()
+			updateStaticLabels()
+			reset_game()
+			init_game(Settings.STARTING_DIFFICULTY + 1)
+		enemyTimer.start(enemyTimer.get_time_left() - 10)
+		enemyTurn = false
+		playerTurn = true
+		
+	if num == solution_grid[row][col] and not alreadyScoredTable[row][col]:
+		aiScore += calculate_difficulty_score(playablePuzzle, col, row)
+		alreadyScoredTable[row][col] = true
+		aiPuzzle[row][col] = num
+		_checkGameWin()
+		
+	enemyTurn = false
+	playerTurn = true
 		
 func _generate_sudoku_soln():
 	for i in range(GRID_SIZE):
@@ -523,22 +616,33 @@ func _generate_sudoku_soln():
 		row.shuffle()
 		solution_grid.append(row)
 		
-		
+func isBoardFull():
+	for row in range(GRID_SIZE):
+		for col in range(GRID_SIZE):
+			if !alreadyScoredTable[row][col]:
+				return false
+	return true
+
+
 func _checkGameWin():
-	if playablePuzzle.hash() == solution_grid.hash():
+	if isBoardFull():
 		playerScore += (1 + (playerTimer.get_time_left() / 100)) * 1000
 		aiScore += (1 + (enemyTimer.get_time_left() / 100)) * 1000
 		if playerScore > aiScore:
 			print('You Win!')
 			print('Youre Score is: ', "%0.4d" % playerScore)
 			print('AI Score is: ', "%0.4d" % aiScore)
-			get_tree().quit()
+			numberOfAIBeat += 1
+			incrementRoom()
+			updateStaticLabels()
+			reset_game()
+			init_game(Settings.STARTING_DIFFICULTY + 1)
 		else: 
 			print('You Lose!')
 			print('Youre Score is: ', "%0.4d" % playerScore)
 			print('AI Score is: ', "%0.4d" % aiScore)
+			print('You beat ', numberOfAIBeat, ' AI')
 			get_tree().quit()
-		
 func count_candidates(grd, row, col):
 	if grd[row][col] != 0:
 		return 0  # Already filled cell
